@@ -1,8 +1,10 @@
-# ./build/basic_serial --nx 250 --nx 250 --num_iter 10000 --scenario wave --output serial.out
-# ./build/gpu --nx 250 --nx 250 --num_iter 10000 --scenario wave --output serial.out
-# ./build/mpi --nx 250 --nx 250 --num_iter 10000 --scenario wave --output serial.out
-
-# make option: mpi gpu serial basic_serial
-make serial
-./build/serial --nx 250 --nx 250 --num_iter 1000 --output serial.out
-python utils/visualizer.py serial.out serial.gif
+# option: mpi gpu serial basic_serial
+# --scenario water_drop dam_break wave river
+mod=serial
+scenario=water_drop
+nx=250
+ny=250
+niter=1000
+make $mod
+./build/${mod} --nx ${nx} --nx ${ny} --num_iter ${niter} --scenario ${scenario} --output ${mod}.out
+python utils/visualizer.py ${mod}.out ${mod}.gif
