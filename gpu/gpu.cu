@@ -6,7 +6,6 @@
 #include "../common/common.hpp"
 #include "../common/solver.hpp"
 
-
 // Here we hold the number of cells we have in the x and y directions
 int nx, ny;
 
@@ -17,6 +16,11 @@ int nx, ny;
 double *h, *u, *v, *dh, *du, *dv, *dh1, *du1, *dv1, *dh2, *du2, *dv2;
 double H, g, dx, dy, dt;
 
+// GPU device pointers
+double *gpu_h, *gpu_u, *gpu_v;
+double *gpu_dh, *gpu_du, *gpu_dv;
+double *gpu_dh1, *gpu_du1, *gpu_dv1;
+double *gpu_dh2, *gpu_du2, *gpu_dv2;
 
 /**
  * This is your initialization function! We pass in h0, u0, and v0, which are
@@ -31,7 +35,7 @@ double H, g, dx, dy, dt;
 void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
 {
     // @TODO: your code here
-        // TODO: Your code here
+    // TODO: Your code here
     // We set the pointers to the arrays that were passed in
     h = h0;
     u = u0;
@@ -39,6 +43,14 @@ void init(double *h0, double *u0, double *v0, double length_, double width_, int
 
     nx = nx_;
     ny = ny_;
+
+    H = H_;
+    g = g_;
+
+    dx = length_ / nx;
+    dy = width_ / nx;
+
+    dt = dt_;
 
     // We allocate memory for the derivatives
     dh = (double *)calloc(nx * ny, sizeof(double));
@@ -53,13 +65,27 @@ void init(double *h0, double *u0, double *v0, double length_, double width_, int
     du2 = (double *)calloc(ny * ny, sizeof(double));
     dv2 = (double *)calloc(nx * ny, sizeof(double));
 
-    H = H_;
-    g = g_;
+    // Allocate GPU memory for h, u, v and their derivatives
+    cudaMalloc((void **)&gpu_h, nx * ny * sizeof(double));
+    cudaMalloc((void **)&gpu_u, nx * ny * sizeof(double));
+    cudaMalloc((void **)&gpu_v, nx * ny * sizeof(double));
 
-    dx = length_ / nx;
-    dy = width_ / nx;
+    // Transfer data from host to GPU
+    cudaMemcpy(gpu_h, h0, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_u, u0, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_v, v0, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
 
-    dt = dt_;
+    cudaMalloc((void **)&gpu_dh, nx * ny * sizeof(double));
+    cudaMalloc((void **)&gpu_du, nx * ny * sizeof(double));
+    cudaMalloc((void **)&gpu_dv, nx * ny * sizeof(double));
+
+    cudaMalloc((void **)&gpu_dh1, nx * ny * sizeof(double));
+    cudaMalloc((void **)&gpu_du1, nx * ny * sizeof(double));
+    cudaMalloc((void **)&gpu_dv1, nx * ny * sizeof(double));
+
+    cudaMalloc((void **)&gpu_dh2, nx * ny * sizeof(double));
+    cudaMalloc((void **)&gpu_du2, nx * ny * sizeof(double));
+    cudaMalloc((void **)&gpu_dv2, nx * ny * sizeof(double));
 }
 
 void swap_buffers()
@@ -82,8 +108,19 @@ void swap_buffers()
     dv = tmp;
 }
 
-int t = 0;
+__global__ 
+void compute_ghost_horizontal_gpu(double* h, int nx, int ny)
+{
+    int index = threadIdx.x + blockDim.x * blockIdx.x;
+    int stride = blockDim.x * gridDim.x;
+    for (int j = index; j < ny; j += stride)
+    {
+        h(nx, j) = h(0, j);
+        // gpu_h[(nx) * (ny + 1) + (j)] = gpu_h[j];
+    }
+}
 
+int t = 0;
 
 /**
  * This is your step function! Here, you will actually numerically solve the shallow
@@ -92,13 +129,20 @@ int t = 0;
  */
 void step()
 {
-    // @TODO: Your code here
+    int bs = 256;
+    int numSMs;
+    cudaDeviceGetAttribute(&numSMs, cudaDevAttrMultiProcessorCount, 0);
     // First
     // compute_ghost_horizontal
-    for (int j = 0; j < ny; j++)
-    {
-        h(nx, j) = h(0, j);
-    }
+
+    cudaMemcpy(gpu_h, h, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    compute_ghost_horizontal_gpu<<<32 * numSMs, bs>>>(gpu_h, nx, ny);
+    cudaMemcpy(h, gpu_h, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+
+    // for (int j = 0; j < ny; j++)
+    // {
+    //     h(nx, j) = h(0, j);
+    // }
     // compute_ghost_vertical
     for (int i = 0; i < nx; i++)
     {
@@ -199,7 +243,23 @@ void transfer(double *h_host)
  */
 void free_memory()
 {
-    // @TODO: Your code here
+    // Free GPU memory
+    cudaFree(gpu_h);
+    cudaFree(gpu_u);
+    cudaFree(gpu_v);
+
+    cudaFree(gpu_dh);
+    cudaFree(gpu_du);
+    cudaFree(gpu_dv);
+
+    cudaFree(gpu_dh1);
+    cudaFree(gpu_du1);
+    cudaFree(gpu_dv1);
+
+    cudaFree(gpu_dh2);
+    cudaFree(gpu_du2);
+    cudaFree(gpu_dv2);
+
     // TODO: Your code here
     free(dh);
     free(du);
