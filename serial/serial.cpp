@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <math.h>
+#include <omp.h>
 
 #include "../common/common.hpp"
 #include "../common/solver.hpp"
@@ -21,6 +22,10 @@ double H, g, dx, dy, dt;
 void init(double *h0, double *u0, double *v0, double length_, double width_, int nx_, int ny_, double H_, double g_, double dt_, int rank_, int num_procs_)
 {
     // TODO: Your code here
+
+    // set thread num
+    int num_thread = omp_get_num_procs();
+    omp_set_num_threads(num_thread < 64 ? num_thread : 64);
 
     // We set the pointers to the arrays that were passed in
     h = h0;
@@ -81,11 +86,13 @@ void step()
 {
     // First
     // compute_ghost_horizontal
+    #pragma omp parallel for
     for (int j = 0; j < ny; j++)
     {
         h(nx, j) = h(0, j);
     }
     // compute_ghost_vertical
+    #pragma omp parallel for
     for (int i = 0; i < nx; i++)
     {
         h(i, ny) = h(i, 0);
@@ -93,6 +100,7 @@ void step()
 
     // Next, compute the derivatives of fields
     // compute_dh
+    #pragma omp parallel for
     for (int i = 0; i < nx; i++)
     {
         for (int j = 0; j < ny; j++)
@@ -101,6 +109,7 @@ void step()
         }
     }
     // compute_du
+    #pragma omp parallel for
     for (int i = 0; i < nx; i++)
     {
         for (int j = 0; j < ny; j++)
@@ -109,6 +118,7 @@ void step()
         }
     }
     // compute_dv
+    #pragma omp parallel for
     for (int i = 0; i < nx; i++)
     {
         for (int j = 0; j < ny; j++)
@@ -138,6 +148,7 @@ void step()
 
     // Finally, compute the next time step using multistep method
     // multistep(a1, a2, a3);
+    #pragma omp parallel for
     for (int i = 0; i < nx; i++)
     {
         for (int j = 0; j < ny; j++)
@@ -151,11 +162,13 @@ void step()
     // We compute the boundaries for our fields, as they are (1) needed for
     // the next time step, and (2) aren't explicitly set in our multistep method
     // compute_boundaries_horizontal
+    #pragma omp parallel for
     for (int j = 0; j < ny; j++)
     {
         u(0, j) = u(nx, j);
     }
     // compute_boundaries_vertical
+    #pragma omp parallel for
     for (int i = 0; i < nx; i++)
     {
         v(i, 0) = v(i, ny);
