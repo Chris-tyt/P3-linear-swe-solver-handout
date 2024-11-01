@@ -120,6 +120,17 @@ void compute_ghost_horizontal_gpu(double* h, int nx, int ny)
     }
 }
 
+__global__ 
+void compute_ghost_vertical_gpu(double* h, int nx, int ny)
+{
+    int index = threadIdx.x + blockDim.x * blockIdx.x;
+    int stride = blockDim.x * gridDim.x;
+    for (int i = index; i < nx; i += stride)
+    {
+        h(i, ny) = h(i, 0);
+    }
+}
+
 int t = 0;
 
 /**
@@ -137,17 +148,20 @@ void step()
 
     cudaMemcpy(gpu_h, h, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
     compute_ghost_horizontal_gpu<<<32 * numSMs, bs>>>(gpu_h, nx, ny);
-    cudaMemcpy(h, gpu_h, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    // cudaMemcpy(h, gpu_h, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
 
     // for (int j = 0; j < ny; j++)
     // {
     //     h(nx, j) = h(0, j);
     // }
+
     // compute_ghost_vertical
-    for (int i = 0; i < nx; i++)
-    {
-        h(i, ny) = h(i, 0);
-    }
+    compute_ghost_vertical_gpu<<<32 * numSMs, bs>>>(gpu_h, nx, ny);
+    cudaMemcpy(h, gpu_h, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    // for (int i = 0; i < nx; i++)
+    // {
+    //     h(i, ny) = h(i, 0);
+    // }
 
     // Next, compute the derivatives of fields
     // compute_dh
