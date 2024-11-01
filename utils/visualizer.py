@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+import time
 import numpy as np
 
 import matplotlib.animation as manimation
@@ -67,4 +68,11 @@ def main(file='serial.out', animation_file='anim.gif'):
     animation_fig.save(animation_file)
 
 if __name__ == "__main__":
+    start_time = time.time()
+    
     main(*sys.argv[1:])
+
+    end_time = time.time()
+
+    elapsed_time = end_time - start_time
+    print(f"Virsualization time: {elapsed_time:.2f} s")
