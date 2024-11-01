@@ -5,8 +5,6 @@
 #include "../common/common.hpp"
 #include "../common/solver.hpp"
 
-int t = 0;
-
 // Here we hold the number of cells we have in the x and y directions
 int nx, ny;
 
@@ -73,6 +71,8 @@ void swap_buffers()
     dv1 = dv;
     dv = tmp;
 }
+
+int t = 0;
 
 /**
  * This is your step function!

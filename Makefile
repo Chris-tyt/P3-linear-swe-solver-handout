@@ -33,6 +33,6 @@ build/basic_serial: common/main.cpp common/scenarios.cpp serial/basic_serial.cpp
 .PHONY: clean
 
 clean:
-	rm -f build/*.out
-	rm -f build/*.o
-	rm -f build/*.gif
+	rm -f *.out
+	rm -f build/*
+	rm -f *.gif
