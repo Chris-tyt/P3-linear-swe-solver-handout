@@ -230,22 +230,23 @@ void transfer(double *h_host)
  */
 void step()
 {
-    int bs = 256;
-    int numSMs;
-    cudaDeviceGetAttribute(&numSMs, cudaDevAttrMultiProcessorCount, 0);
+    int blockSize = 256;
+    int numBlocks;
+    cudaDeviceGetAttribute(&numBlocks, cudaDevAttrMultiProcessorCount, 0);
 
-    dim3 bs_2(16, 16);
-    dim3 sms_2(numSMs * 32, numSMs * 32);
+    dim3 blockSize_2D(16, 16);
+    // dim3 numBlocks_2D(numBlocks * 32, numBlocks * 32);
+    dim3 numBlocks_2D(numBlocks, numBlocks);
 
     // First
-    compute_ghost_horizontal_gpu<<<32 * numSMs, bs>>>(gpu_h, nx, ny);
+    compute_ghost_horizontal_gpu<<<numBlocks, blockSize>>>(gpu_h, nx, ny);
 
-    compute_ghost_vertical_gpu<<<32 * numSMs, bs>>>(gpu_h, nx, ny);
+    compute_ghost_vertical_gpu<<<numBlocks, blockSize>>>(gpu_h, nx, ny);
 
     // Next, compute the derivatives of fields
-    compute_dh_gpu<<<sms_2, bs_2>>>(gpu_dh, gpu_u, gpu_v, dx, dy, nx, ny, H);
-    compute_du_gpu<<<sms_2, bs_2>>>(gpu_du, gpu_h, dx, dy, nx, ny, g);
-    compute_dv_gpu<<<sms_2, bs_2>>>(gpu_dv, gpu_h, dx, dy, nx, ny, g);
+    compute_dh_gpu<<<numBlocks_2D, blockSize_2D>>>(gpu_dh, gpu_u, gpu_v, dx, dy, nx, ny, H);
+    compute_du_gpu<<<numBlocks_2D, blockSize_2D>>>(gpu_du, gpu_h, dx, dy, nx, ny, g);
+    compute_dv_gpu<<<numBlocks_2D, blockSize_2D>>>(gpu_dv, gpu_h, dx, dy, nx, ny, g);
 
     // We set the coefficients for our multistep method
     double a1, a2, a3;
@@ -267,7 +268,7 @@ void step()
     }
 
     // Finally, compute the next time step using multistep method  
-    update_fields_gpu<<<sms_2, bs_2>>>(gpu_h, gpu_u, gpu_v, gpu_dh, gpu_du, gpu_dv,
+    update_fields_gpu<<<numBlocks_2D, blockSize_2D>>>(gpu_h, gpu_u, gpu_v, gpu_dh, gpu_du, gpu_dv,
                                                   gpu_dh1, gpu_du1, gpu_dv1,
                                                   gpu_dh2, gpu_du2, gpu_dv2,
                                                   a1, a2, a3, dt, nx, ny);
@@ -275,8 +276,8 @@ void step()
 
     // We compute the boundaries for our fields, as they are (1) needed for
     // the next time step, and (2) aren't explicitly set in our multistep method
-    compute_boundaries_horizontal_gpu<<<32 * numSMs, bs>>>(gpu_u, nx, ny);
-    compute_boundaries_horizontal_gpu<<<32 * numSMs, bs>>>(gpu_v, nx, ny);
+    compute_boundaries_horizontal_gpu<<<numBlocks, blockSize>>>(gpu_u, nx, ny);
+    compute_boundaries_horizontal_gpu<<<numBlocks, blockSize>>>(gpu_v, nx, ny);
     
 
     // We swap the buffers for our derivatives so that we can use the derivatives
