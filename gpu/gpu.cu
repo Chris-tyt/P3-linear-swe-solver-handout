@@ -202,6 +202,29 @@ __global__ void compute_dv_gpu(double *dv, double *h, double dx, double dy, int 
     }
 }
 
+__global__
+void update_fields_gpu(double* h, double* u, double* v, double* dh, double* du, double* dv,
+                       double* dh1, double* du1, double* dv1, double* dh2, double* du2, double* dv2,
+                       double a1, double a2, double a3, double dt, int nx, int ny)
+{
+    // Calculate the initial position of the thread in the grid
+    int i = blockIdx.x * blockDim.x + threadIdx.x;
+    int j = blockIdx.y * blockDim.y + threadIdx.y;
+
+    // Calculate the stride for both x and y directions
+    int stride_x = blockDim.x * gridDim.x;
+    int stride_y = blockDim.y * gridDim.y;
+
+    // Loop over the elements using the stride
+    for (int x = i; x < nx; x += stride_x) {
+        for (int y = j; y < ny; y += stride_y) {
+            h(x, y) += (a1 * dh(x, y) + a2 * dh1(x, y) + a3 * dh2(x, y)) * dt;
+            u(x + 1, y) += (a1 * du(x, y) + a2 * du1(x, y) + a3 * du2(x, y)) * dt;
+            v(x, y + 1) += (a1 * dv(x, y) + a2 * dv1(x, y) + a3 * dv2(x, y)) * dt;
+        }
+    }
+}
+
 __global__ void compute_boundaries_horizontal_gpu(double *u, int nx, int ny)
 {
     int index = threadIdx.x + blockDim.x * blockIdx.x;
@@ -240,6 +263,17 @@ void step()
 
     // First
     cudaMemcpy(gpu_h, h, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_dh, dh, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_du, du, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_dv, dv, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_u, u, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_v, v, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_dh1, dh1, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_dh2, dh2, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_du1, du1, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_du2, du2, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_dv1, dv1, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    cudaMemcpy(gpu_dv2, dv2, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
 
     // compute_ghost_horizontal
     compute_ghost_horizontal_gpu<<<32 * numSMs, bs>>>(gpu_h, nx, ny);
@@ -249,20 +283,16 @@ void step()
 
     // Next, compute the derivatives of fields
     // compute_dh
-    cudaMemcpy(gpu_dh, dh, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(gpu_du, du, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(gpu_dv, dv, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(gpu_u, u, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(gpu_v, v, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    
 
     compute_dh_gpu<<<sms_2, bs_2>>>(gpu_dh, gpu_u, gpu_v, dx, dy, nx, ny, H);
     compute_du_gpu<<<sms_2, bs_2>>>(gpu_du, gpu_h, dx, dy, nx, ny, g);
     compute_dv_gpu<<<sms_2, bs_2>>>(gpu_dv, gpu_h, dx, dy, nx, ny, g);
 
-    cudaMemcpy(dh, gpu_dh, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(du, gpu_du, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(dv, gpu_dv, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
-    cudaMemcpy(h, gpu_h, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    // cudaMemcpy(dh, gpu_dh, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    // cudaMemcpy(du, gpu_du, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    // cudaMemcpy(dv, gpu_dv, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    // cudaMemcpy(h, gpu_h, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
 
 
     // We set the coefficients for our multistep method
@@ -286,20 +316,41 @@ void step()
 
     // Finally, compute the next time step using multistep method
     // multistep(a1, a2, a3);
-    for (int i = 0; i < nx; i++)
-    {
-        for (int j = 0; j < ny; j++)
-        {
-            h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
-            u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
-            v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
-        }
-    }
+    // cudaMemcpy(gpu_h, h, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    // cudaMemcpy(gpu_u, u, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    // cudaMemcpy(gpu_v, v, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+
+    // cudaMemcpy(gpu_dh, dh, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    // cudaMemcpy(gpu_du, du, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    // cudaMemcpy(gpu_dv, dv, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+
+    
+
+    update_fields_gpu<<<sms_2, bs_2>>>(gpu_h, gpu_u, gpu_v, gpu_dh, gpu_du, gpu_dv,
+                                                  gpu_dh1, gpu_du1, gpu_dv1,
+                                                  gpu_dh2, gpu_du2, gpu_dv2,
+                                                  a1, a2, a3, dt, nx, ny);
+    
+    
+    // cudaMemcpy(u, gpu_u, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    // cudaMemcpy(v, gpu_v, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+
+    
+
+    // for (int i = 0; i < nx; i++)
+    // {
+    //     for (int j = 0; j < ny; j++)
+    //     {
+    //         h(i, j) += (a1 * dh(i, j) + a2 * dh1(i, j) + a3 * dh2(i, j)) * dt;
+    //         u(i + 1, j) += (a1 * du(i, j) + a2 * du1(i, j) + a3 * du2(i, j)) * dt;
+    //         v(i, j + 1) += (a1 * dv(i, j) + a2 * dv1(i, j) + a3 * dv2(i, j)) * dt;
+    //     }
+    // }
 
     // We compute the boundaries for our fields, as they are (1) needed for
     // the next time step, and (2) aren't explicitly set in our multistep method
-    cudaMemcpy(gpu_u, u, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
-    cudaMemcpy(gpu_v, v, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    // cudaMemcpy(gpu_u, u, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
+    // cudaMemcpy(gpu_v, v, nx * ny * sizeof(double), cudaMemcpyHostToDevice);
     // compute_boundaries_horizontal
     compute_boundaries_horizontal_gpu<<<32 * numSMs, bs>>>(gpu_u, nx, ny);
 
@@ -308,6 +359,17 @@ void step()
     
     cudaMemcpy(u, gpu_u, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
     cudaMemcpy(v, gpu_v, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(h, gpu_h, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(dh, gpu_dh, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(du, gpu_du, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(dv, gpu_dv, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+
+    cudaMemcpy(dh1, gpu_dh1, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(dh2, gpu_dh2, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(du1, gpu_du1, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(du2, gpu_du2, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(dv1, gpu_dv1, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
+    cudaMemcpy(dv2, gpu_dv2, nx * ny * sizeof(double), cudaMemcpyDeviceToHost);
 
     // We swap the buffers for our derivatives so that we can use the derivatives
     // from the previous time steps in our multistep method, then increment
